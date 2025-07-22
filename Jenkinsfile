@@ -4,9 +4,8 @@ pipeline {
     environment {
         DOCKER_IMAGE = "devops-crud-app"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SCANNER_HOME = tool 'sonar-scanner'
         SONAR_PROJECT_KEY = "project1-devops-crud-app"
-        SONAR_HOST_URL = credentials('host-url')
+        SONAR_HOST_URL = "http://192.168.0.73:9000" 
     }
     
     stages {
@@ -24,7 +23,7 @@ pipeline {
             }
             steps {
                 script {
-                    def scannerHome = tool 'SonarQubeScanner' 
+                    def scannerHome = tool 'sonar-scanner' 
                     sh """
                         ${scannerHome}/bin/sonar-scanner \
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
