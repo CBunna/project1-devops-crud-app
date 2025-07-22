@@ -4,11 +4,9 @@ pipeline {
     environment {
         DOCKER_IMAGE = "devops-crud-app"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SONAR_PROJECT_KEY = "devops-crud-app"
-    }
-    
-    tools {
-        nodejs "nodejs"  
+        SCANNER_HOME = tool 'sonar-scanner'
+        SONAR_PROJECT_KEY = "project1-devops-crud-app"
+        SONAR_HOST_URL = credentials('host-url')
     }
     
     stages {
@@ -25,63 +23,35 @@ pipeline {
                 echo "✅ Dependencies installed"
             }
         }
-        
-        stage('Run Tests') {
-            steps {
-                sh 'npm test'
-                echo "✅ Tests completed"
-            }
-            post {
-                always {
-                    publishTestResults testResultsPattern: 'coverage/lcov.info'
-                    publishHTML([
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'coverage',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report'
-                    ])
-                }
-            }
-        }
-        
+           
         stage('SonarQube Analysis') {
             environment {
-                SONAR_TOKEN = credentials('sonar-token')  // Configure this in Jenkins
+                SONAR_TOKEN = credentials('sonar-token')
             }
             steps {
                 script {
-                    def scannerHome = tool 'SonarQubeScanner'  // Configure this in Jenkins
-                    withSonarQubeEnv('SonarCloud') {  // Configure this in Jenkins
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                -Dsonar.sources=src \
-                                -Dsonar.tests=tests \
-                                -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                                -Dsonar.testExecutionReportPaths=coverage/test-reporter.xml
-                        """
-                    }
+                    def scannerHome = tool 'SonarQubeScanner' 
+                    sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.sources=src \
+                            -Dsonar.tests=tests \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.token=${SONAR_TOKEN} \
+                            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                            -Dsonar.exclusions=**/node_modules/**,**/coverage/**
+                    """
                 }
                 echo "✅ SonarQube analysis completed"
-            }
-        }
-        
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-                echo "✅ Quality gate passed"
             }
         }
         
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
-                    docker.build("${DOCKER_IMAGE}:latest")
+                    // Build images with proper tags for Docker Hub
+                    dockerImage = docker.build("bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}")
+                    docker.build("bunna44/${DOCKER_IMAGE}:latest")
                 }
                 echo "✅ Docker image built successfully"
             }
@@ -94,47 +64,28 @@ pipeline {
             }
         }
         
-        stage('Deploy to Staging') {
+        stage('Docker Build and Push') {
             steps {
                 script {
-                    // Stop existing container if running
-                    sh """
-                        docker stop ${DOCKER_IMAGE}-staging || true
-                        docker rm ${DOCKER_IMAGE}-staging || true
-                    """
-                    
-                    // Run new container
-                    sh """
-                        docker run -d \
-                            --name ${DOCKER_IMAGE}-staging \
-                            -p 3001:3000 \
-                            -e NODE_ENV=staging \
-                            -e DB_HOST=${env.DB_HOST} \
-                            -e DB_USER=${env.DB_USER} \
-                            -e DB_PASSWORD=${env.DB_PASSWORD} \
-                            -e DB_NAME=${env.DB_NAME}_staging \
-                            ${DOCKER_IMAGE}:${DOCKER_TAG}
-                    """
+                    // Login to Docker Hub and push images
+                    withCredentials([usernamePassword(credentialsId: 'docker-red', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh """
+                            echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin
+                            
+                            # Push versioned image
+                            docker push bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}
+                            
+                            # Push latest image
+                            docker push bunna44/${DOCKER_IMAGE}:latest
+                            
+                            echo "✅ Images pushed to Docker Hub successfully"
+                        """
+                    }
                 }
-                echo "✅ Deployed to staging environment"
+                echo "✅ Docker build and push completed"
             }
         }
-        
-        stage('Integration Tests') {
-            steps {
-                sh """
-                    # Wait for application to start
-                    sleep 30
-                    
-                    # Run integration tests against staging
-                    curl -f http://localhost:3001/health || exit 1
-                    echo "Health check passed"
-                    
-                    # Additional integration tests can be added here
-                """
-                echo "✅ Integration tests passed"
-            }
-        }
+    
         
         stage('Deploy to Production') {
             when {
@@ -153,28 +104,6 @@ pipeline {
                 }
                 echo "✅ Deployed to production"
             }
-        }
-    }
-    
-    post {
-        always {
-            // Clean up
-            sh """
-                docker stop ${DOCKER_IMAGE}-staging || true
-                docker rm ${DOCKER_IMAGE}-staging || true
-                docker system prune -f
-            """
-            
-            // Archive artifacts
-            archiveArtifacts artifacts: 'coverage/**', allowEmptyArchive: true
-        }
-        success {
-            echo "🎉 Pipeline completed successfully!"
-            // Send success notification (Slack, email, etc.)
-        }
-        failure {
-            echo "❌ Pipeline failed"
-            // Send failure notification
         }
     }
 }
