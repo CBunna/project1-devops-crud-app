@@ -17,12 +17,6 @@ pipeline {
             }
         }
         
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm clean-install'
-                echo "✅ Dependencies installed"
-            }
-        }
            
         stage('SonarQube Analysis') {
             environment {
