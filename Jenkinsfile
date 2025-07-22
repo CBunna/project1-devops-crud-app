@@ -4,9 +4,12 @@ pipeline {
     environment {
         DOCKER_IMAGE = "devops-crud-app"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SCANNER_HOME = tool 'sonar-scanner'
         SONAR_PROJECT_KEY = "project1-devops-crud-app"
-        SONAR_HOST_URL = credentials('host-url')
+        SONAR_HOST_URL = "http://192.168.0.73:9000"  // Direct URL instead of credential
+    }
+    
+    tools {
+        nodejs "nodejs"  // Make sure this matches your Jenkins Global Tools config
     }
     
     stages {
@@ -17,6 +20,31 @@ pipeline {
             }
         }
         
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm clean-install'
+                echo "✅ Dependencies installed"
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                sh 'npm test'
+                echo "✅ Tests completed"
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'coverage',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ])
+                }
+            }
+        }
            
         stage('SonarQube Analysis') {
             environment {
@@ -24,8 +52,18 @@ pipeline {
             }
             steps {
                 script {
-                    def scannerHome = tool 'SonarQubeScanner' 
+                    // Use consistent tool name - check your Jenkins Global Tools config
+                    def scannerHome = tool 'SonarQubeScanner'  // Make sure this matches your tool name
+                    
+                    echo "Scanner Home: ${scannerHome}"
+                    echo "SonarQube URL: ${SONAR_HOST_URL}"
+                    echo "Project Key: ${SONAR_PROJECT_KEY}"
+                    
                     sh """
+                        echo "🔍 Starting SonarQube Analysis..."
+                        echo "Scanner path: ${scannerHome}/bin/sonar-scanner"
+                        ls -la ${scannerHome}/bin/
+                        
                         ${scannerHome}/bin/sonar-scanner \
                             -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                             -Dsonar.sources=src \
@@ -40,9 +78,19 @@ pipeline {
             }
         }
         
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+                echo "✅ Quality gate passed"
+            }
+        }
+        
         stage('Build Docker Image') {
             steps {
                 script {
+                    echo "🐳 Building Docker images..."
                     // Build images with proper tags for Docker Hub
                     dockerImage = docker.build("bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}")
                     docker.build("bunna44/${DOCKER_IMAGE}:latest")
@@ -53,7 +101,11 @@ pipeline {
         
         stage('Security Scan') {
             steps {
-                sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \$(pwd):/app aquasec/trivy image ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                script {
+                    echo "🔒 Running security scan..."
+                    // Use correct image name with bunna44 prefix
+                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \$(pwd):/app aquasec/trivy image bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}"
+                }
                 echo "✅ Security scan completed"
             }
         }
@@ -61,6 +113,7 @@ pipeline {
         stage('Docker Build and Push') {
             steps {
                 script {
+                    echo "📦 Pushing to Docker Hub..."
                     // Login to Docker Hub and push images
                     withCredentials([usernamePassword(credentialsId: 'docker-red', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh """
@@ -79,7 +132,6 @@ pipeline {
                 echo "✅ Docker build and push completed"
             }
         }
-    
         
         stage('Deploy to Production') {
             when {
@@ -89,15 +141,32 @@ pipeline {
                 input message: 'Deploy to Production?', ok: 'Deploy'
                 
                 script {
-                    // Production deployment logic here
-                    // This could involve pushing to a registry, updating Kubernetes manifests, etc.
                     sh """
-                        docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:production
+                        docker tag bunna44/${DOCKER_IMAGE}:${DOCKER_TAG} bunna44/${DOCKER_IMAGE}:production
                         echo "Tagged image for production deployment"
                     """
                 }
                 echo "✅ Deployed to production"
             }
+        }
+    }
+    
+    post {
+        always {
+            echo "🧹 Cleaning up..."
+            sh """
+                # Clean up local images to save space
+                docker rmi bunna44/${DOCKER_IMAGE}:${DOCKER_TAG} || true
+                docker system prune -f
+            """
+        }
+        success {
+            echo "🎉 Pipeline completed successfully!"
+            echo "📦 Images available: bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+            echo "Check the logs above for error details"
         }
     }
 }
