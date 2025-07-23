@@ -52,7 +52,7 @@ pipeline {
         
         stage('Security Scan') {
             steps {
-                sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \$(pwd):/app aquasec/trivy image ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v \$(pwd):/app aquasec/trivy image bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}"
                 echo "✅ Security scan completed"
             }
         }
