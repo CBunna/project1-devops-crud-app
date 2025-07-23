@@ -106,12 +106,12 @@ pipeline {
                                 --name ${DOCKER_IMAGE}-staging \
                                 -p 3001:3000 \
                                 -e NODE_ENV=staging \
-                                -e DB_HOST=\${DB_HOST:-localhost} \
+                                -e DB_HOST=\${DB_HOST} \
                                 -e DB_PORT=\${DB_PORT:-3306} \
-                                -e DB_USER=\${DB_USER:-root} \
-                                -e DB_PASSWORD=\${DB_PASSWORD:-password} \
-                                -e DB_NAME=\${DB_NAME:-devops_crud_db}_staging \
-                                -e DB_SSL=\${DB_SSL:-false} \
+                                -e DB_USER=\${DB_USER} \
+                                -e DB_PASSWORD=\${DB_PASSWORD} \
+                                -e DB_NAME=\${DB_NAME} \
+                                -e DB_SSL=\${DB_SSL:-true} \
                                 --restart unless-stopped \
                                 bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}
                         """
