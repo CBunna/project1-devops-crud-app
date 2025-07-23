@@ -80,7 +80,7 @@ pipeline {
         }
 
 
-               stage('Run Container') {
+        stage('Run Container') {
             steps {
                 script {
                     echo "🚀 Deploying container to staging environment..."
