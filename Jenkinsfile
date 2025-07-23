@@ -78,6 +78,86 @@ pipeline {
                 echo "✅ Docker build and push completed"
             }
         }
+
+
+                stage('Run Container') {
+            steps {
+                script {
+                    echo "🚀 Deploying container to staging environment..."
+                    
+                    try {
+                        // Stop and remove any existing container
+                        sh """
+                            echo "🧹 Cleaning up existing containers..."
+                            docker stop ${DOCKER_IMAGE}-staging || true
+                            docker rm ${DOCKER_IMAGE}-staging || true
+                        """
+                        
+                        // Pull the latest image from Docker Hub
+                        sh """
+                            echo "📥 Pulling latest image from Docker Hub..."
+                            docker pull bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}
+                        """
+                        
+                        // Run the container
+                        sh """
+                            echo "🏃 Starting container..."
+                            docker run -d \
+                                --name ${DOCKER_IMAGE}-staging \
+                                -p 3001:3000 \
+                                -e NODE_ENV=staging \
+                                -e DB_HOST=\${DB_HOST:-localhost} \
+                                -e DB_PORT=\${DB_PORT:-3306} \
+                                -e DB_USER=\${DB_USER:-root} \
+                                -e DB_PASSWORD=\${DB_PASSWORD:-password} \
+                                -e DB_NAME=\${DB_NAME:-devops_crud_db}_staging \
+                                -e DB_SSL=\${DB_SSL:-false} \
+                                --restart unless-stopped \
+                                bunna44/${DOCKER_IMAGE}:${DOCKER_TAG}
+                        """
+                        
+                        // Wait for container to start
+                        echo "⏳ Waiting for container to start..."
+                        sleep(time: 30, unit: "SECONDS")
+                        
+                        // Health check
+                        echo "🔍 Performing health checks..."
+                        sh """
+                            # Check if container is running
+                            docker ps | grep ${DOCKER_IMAGE}-staging || exit 1
+                            echo "✅ Container is running"
+                            
+                            # Check container logs
+                            echo "📋 Recent container logs:"
+                            docker logs ${DOCKER_IMAGE}-staging --tail 20
+                            
+                            # Health check endpoint
+                            curl -f http://localhost:3001/health || exit 1
+                            echo "✅ Health check passed"
+                            
+                            # Test API endpoints
+                            curl -f http://localhost:3001/api/tasks || exit 1
+                            echo "✅ API endpoints accessible"
+                        """
+                        
+                        echo "✅ Container deployed and verified successfully!"
+                        echo "🌐 Application available at: http://localhost:3001"
+                        
+                    } catch (Exception e) {
+                        echo "❌ Container deployment failed: ${e.getMessage()}"
+                        
+                        // Show container logs for debugging
+                        sh """
+                            echo "🔍 Debugging container issues..."
+                            docker logs ${DOCKER_IMAGE}-staging --tail 50 || echo "No logs available"
+                            docker ps -a | grep ${DOCKER_IMAGE} || echo "No containers found"
+                        """
+                        
+                        throw e
+                    }
+                }
+            }
+        }
     
         
         stage('Deploy to Production') {
