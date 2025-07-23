@@ -50,14 +50,41 @@ class TaskManager {
                     ${task.updated_at !== task.created_at ? `<br>Updated: ${new Date(task.updated_at).toLocaleString()}` : ''}
                 </div>
                 <div class="task-actions">
-                    <button onclick="taskManager.toggleComplete(${task.id}, ${!task.completed})">
+                    <button data-action="toggle" data-id="${task.id}" data-completed="${!task.completed}">
                         ${task.completed ? 'Mark Incomplete' : 'Mark Complete'}
                     </button>
-                    <button class="edit" onclick="taskManager.editTask(${task.id})">Edit</button>
-                    <button class="delete" onclick="taskManager.deleteTask(${task.id})">Delete</button>
+                    <button class="edit" data-action="edit" data-id="${task.id}">Edit</button>
+                    <button class="delete" data-action="delete" data-id="${task.id}">Delete</button>
                 </div>
             </div>
         `).join('');
+
+        // Add event listeners to buttons
+        this.attachEventListeners();
+    }
+
+    attachEventListeners() {
+        // Remove existing event listeners to prevent duplicates
+        const buttons = this.tasksContainer.querySelectorAll('button[data-action]');
+        buttons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const action = e.target.getAttribute('data-action');
+                const id = parseInt(e.target.getAttribute('data-id'));
+                
+                switch(action) {
+                    case 'toggle':
+                        const completed = e.target.getAttribute('data-completed') === 'true';
+                        this.toggleComplete(id, completed);
+                        break;
+                    case 'edit':
+                        this.editTask(id);
+                        break;
+                    case 'delete':
+                        this.deleteTask(id);
+                        break;
+                }
+            });
+        });
     }
 
     async handleSubmit(e) {

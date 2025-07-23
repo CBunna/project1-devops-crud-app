@@ -3,6 +3,7 @@ npm-debug.log
 coverage/
 .nyc_output/
 .env
+.env.example
 *.log
 .DS_Store
 dist/
