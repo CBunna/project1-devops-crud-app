@@ -17,19 +17,18 @@ pipeline {
         }
         
         stage('SonarQube Analysis') {
-            environment {
-                SONAR_TOKEN = credentials('SONAR_TOKEN')
-            }
             steps {
                 script {
-                    def scannerHome = tool 'sonar-scanner' 
-                    sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.sources=src \
-                            -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.token=${SONAR_TOKEN}
-                    """
+                    def scannerHome = tool 'sonar-scanner'
+                    withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.sources=src \
+                                -Dsonar.host.url=${SONAR_HOST_URL} \
+                                -Dsonar.token=\$SONAR_TOKEN
+                        """
+                    }
                 }
                 echo "SonarQube analysis completed"
             }
